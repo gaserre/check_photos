@@ -107,12 +107,15 @@ class CheckPhotos(object):
         # spaces = 'photos, drive'
         spaces = 'photos'
         fields = "nextPageToken, files({})".format(FILE_FIELDS)
+        page_size = 1000
         page_token = None
         drive_files = {}
         getter = operator.itemgetter(*DriveFile._fields)
         while True:
             LOG.info("Reading files from Google")
             entries = self._files.list(corpora=corpora,
+                                       pageToken=page_token,
+                                       pageSize=page_size,
                                        spaces=spaces,
                                        q=query,
                                        fields=fields).execute()
@@ -128,10 +131,11 @@ class CheckPhotos(object):
 
     def check(self, path, not_uploaded_path):
         ''' check one file or tree '''
+        print("Checking.  Files not uploaded will be printed and written to file.")
         with open(not_uploaded_path, 'w') as f:
             self._not_uploaded_file = f
             self._check(path)
-        print("Not uploaded:", self._not_uploaded, "in", not_uploaded_path)
+        print("Not uploaded:", self._not_uploaded, "listed in", not_uploaded_path)
         print("Already uploaded:", self._already_uploaded)
 
     def _check(self, path):
@@ -153,7 +157,7 @@ class CheckPhotos(object):
         if drive_file:
             self._already_uploaded += 1
         else:
-            print(path, "not uploaded")
+            print(path)
             self._not_uploaded += 1
             print(path, file=self._not_uploaded_file)
 
