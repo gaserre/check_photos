@@ -18,6 +18,27 @@ from oauth2client import tools
 from oauth2client.file import Storage
 
 MB = 1024 * 1024
+DRIVE_CACHE_DB = 'cached_drive_photos.pickle'
+NOT_UPLOADED_FILE = 'not_uploaded.txt'
+
+MEDIA_EXTENSIONS = {'.jpg': True,
+                    '.mpg': True,
+                    '.wav': True,
+                    '.tif': True,
+                    '.m4a': True,
+                    '.bmp': True,
+                    '.mp4': True,
+                    '.mp3': True,
+                    '.aac': True,
+                    '.jpeg': True,
+                    '.dsc': True,
+                    '.gif': True,
+                    '.m4v': True,
+                    '.png': True,
+                    '.avi': True,
+                    '.wmv': True,
+                    '.mov': True,
+                    '.mts': True}
 
 LOG = logging.getLogger('check_photos')
 LOG.setLevel(logging.INFO)
@@ -25,8 +46,11 @@ LOG.addHandler(logging.StreamHandler())
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/drive-python-quickstart.json
-SCOPES = ('https://www.googleapis.com/auth/drive.metadata.readonly '
-          'https://www.googleapis.com/auth/drive.photos.readonly')
+SCOPES = ('https://www.googleapis.com/auth/drive.readonly '
+          'https://www.googleapis.com/auth/drive.photos.readonly '
+          'https://picasaweb.google.com/data/')
+
+
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Drive API Python Quickstart'
 
@@ -98,36 +122,45 @@ class CheckPhotos(object):
             LOG.info("db_path %s not found", db_path)
             return
         self._drive_files = drive_files
+        print("read files from cache,", len(self._drive_files), "files")
 
     def _load_drive(self):
         ''' Load the drive file list and checksums to local cache '''
         corpora = 'user'
-        # query = "name contains 'PIC00028.jpg'"
-        query = None
-        # spaces = 'photos, drive'
-        spaces = 'photos'
+        # no query (q in files.list)
+        # 2017-12-12: spaces = 'photos' doesn't retrieve all photos, and
+        # will be "sunsetted" soon.  The photos it doesn't retrieve appear to
+        # be those uploaded via Google's Backup and Sync app.
+        spaces = 'drive'
         fields = "nextPageToken, files({})".format(FILE_FIELDS)
         page_size = 1000
         page_token = None
         drive_files = {}
         getter = operator.itemgetter(*DriveFile._fields)
+        count = 0
         while True:
             LOG.info("Reading files from Google")
             entries = self._files.list(corpora=corpora,
                                        pageToken=page_token,
                                        pageSize=page_size,
                                        spaces=spaces,
-                                       q=query,
                                        fields=fields).execute()
             page_token = entries.get('nextPageToken', None)
             files = entries.get('files', [])
             LOG.info("Read %s files from drive", len(files))
             for f in files:
-                drive_file = DriveFile(*getter(f))
+                count += 1
+                try:
+                    drive_file = DriveFile(*getter(f))
+                except KeyError:
+                    # no checksum, which means it's a folder or something.
+                    continue
                 drive_files[drive_file.md5Checksum] = drive_file
+                count += 1
             if not page_token:
                 break
         self._drive_files = drive_files
+        print("Finished reading from google, read", count, "files")
 
     def check(self, path, not_uploaded_path):
         ''' check one file or tree '''
@@ -148,9 +181,13 @@ class CheckPhotos(object):
 
         for root, _dirs, files in os.walk(path):
             for f in files:
-                if not f.endswith(".jpg"):
+                ext = os.path.splitext(f)[1].lower()
+                if not MEDIA_EXTENSIONS.get(ext, False):
                     continue
-                self._check_file(os.path.join(root, f))
+                fpath = os.path.join(root, f)
+                if os.path.islink(fpath):
+                    continue
+                self._check_file(fpath)
 
     def _check_file(self, path):
         drive_file = self._drive_files.get(self._md5(path), None)
@@ -172,6 +209,22 @@ class CheckPhotos(object):
                 md5.update(buf)
         return md5.hexdigest()
 
+    def dump_extensions(self, db_path):
+        '''
+        Dump a list of extensions found in the cache file to assist
+        in creating the list of media extensions.
+        '''
+        self._drive_files = {}
+        self._load_file(db_path)
+        extensions = {}
+        for f in iter(self._drive_files.values()):
+            ext = os.path.splitext(f.name)[1].lower()
+            if not ext:
+                continue
+            extensions[ext] = True
+        print("Extensions in files in local cache:")
+        print(extensions.keys())
+
 def main():
     """
     Check that pictures have been successfully uploaded to Google Photos or Drive.
@@ -181,16 +234,23 @@ def main():
     """
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('path', nargs='+', help='directory or file to check')
+    parser.add_argument('--dump_extensions',
+                        action='store_true',
+                        help='print extensions in cached files then exit.')
     flags = parser.parse_args()
+
+    if flags.dump_extensions:
+        checker = CheckPhotos(None)
+        checker.dump_extensions(DRIVE_CACHE_DB)
 
     credentials = get_credentials(flags)
     http = credentials.authorize(httplib2.Http())
     service = discovery.build('drive', 'v3', http=http)
     checker = CheckPhotos(service.files())
 
-    checker.load('cached_drive_photos.pickle')
+    checker.load(DRIVE_CACHE_DB)
     for path in flags.path:
-        checker.check(path, "not_uploaded.txt")
+        checker.check(path, NOT_UPLOADED_FILE)
 
 if __name__ == '__main__':
     main()
