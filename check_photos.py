@@ -1,6 +1,31 @@
 #!/usr/bin/env python3
 '''
-Check that photos, etc. have been uploaded successfully
+
+Copyright 2017, Glenn A. Serre
+
+The get_credentials function is 
+from https://developers.google.com/drive/v3/web/quickstart/python, 
+code sample, which is licensed under the
+Apache 2.0 License (http://www.apache.org/licenses/LICENSE-2.0).
+No copyright notice seen.
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+Description:
+Check that still and moving picture files have been uploaded successfully to 
+Google Drive. 
+
 '''
 from __future__ import print_function
 import os
@@ -23,13 +48,9 @@ NOT_UPLOADED_FILE = 'not_uploaded.txt'
 
 MEDIA_EXTENSIONS = {'.jpg': True,
                     '.mpg': True,
-                    '.wav': True,
                     '.tif': True,
-                    '.m4a': True,
                     '.bmp': True,
                     '.mp4': True,
-                    '.mp3': True,
-                    '.aac': True,
                     '.jpeg': True,
                     '.dsc': True,
                     '.gif': True,
@@ -52,7 +73,7 @@ SCOPES = ('https://www.googleapis.com/auth/drive.readonly '
 
 
 CLIENT_SECRET_FILE = 'client_secret.json'
-APPLICATION_NAME = 'Drive API Python Quickstart'
+APPLICATION_NAME = 'check_photos'
 
 FILE_FIELDS = 'id, name, md5Checksum'
 DriveFile = collections.namedtuple('DriveFile', FILE_FIELDS)
@@ -71,7 +92,7 @@ def get_credentials(flags):
     if not os.path.exists(credential_dir):
         os.makedirs(credential_dir)
     credential_path = os.path.join(credential_dir,
-                                   'drive-python-quickstart.json')
+                                   'check_photos-credentials.json')
 
     store = Storage(credential_path)
     credentials = store.get()
@@ -80,8 +101,6 @@ def get_credentials(flags):
         flow.user_agent = APPLICATION_NAME
         if flags:
             credentials = tools.run_flow(flow, store, flags)
-        else: # Needed only for compatibility with Python 2.6
-            credentials = tools.run(flow, store)
         LOG.info('Storing credentials to ' + credential_path)
     return credentials
 
