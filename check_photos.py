@@ -3,8 +3,8 @@
 
 Copyright 2017, Glenn A. Serre
 
-The get_credentials function is 
-from https://developers.google.com/drive/v3/web/quickstart/python, 
+The get_credentials function is
+from https://developers.google.com/drive/v3/web/quickstart/python,
 code sample, which is licensed under the
 Apache 2.0 License (http://www.apache.org/licenses/LICENSE-2.0).
 No copyright notice seen.
@@ -23,8 +23,8 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 Description:
-Check that still and moving picture files have been uploaded successfully to 
-Google Drive. 
+Check that still and moving picture files have been uploaded successfully to
+Google Drive.
 
 '''
 from __future__ import print_function
@@ -41,6 +41,8 @@ from apiclient import discovery
 from oauth2client import client
 from oauth2client import tools
 from oauth2client.file import Storage
+
+from PIL import Image
 
 MB = 1024 * 1024
 DRIVE_CACHE_DB = 'cached_drive_photos.pickle'
@@ -60,6 +62,8 @@ MEDIA_EXTENSIONS = {'.jpg': True,
                     '.wmv': True,
                     '.mov': True,
                     '.mts': True}
+MINIMUM_IMAGE_HEIGHT = 256
+MINIMUM_IMAGE_WIDTH = 256
 
 LOG = logging.getLogger('check_photos')
 LOG.setLevel(logging.INFO)
@@ -70,7 +74,7 @@ LOG.addHandler(logging.StreamHandler())
 SCOPES = ('https://www.googleapis.com/auth/drive.readonly '
           'https://www.googleapis.com/auth/drive.photos.readonly '
           'https://picasaweb.google.com/data/')
-
+ 
 
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'check_photos'
@@ -197,18 +201,28 @@ class CheckPhotos(object):
         if os.path.isfile(path):
             self._check_file(path)
             return
-
         for root, _dirs, files in os.walk(path):
-            for f in files:
-                ext = os.path.splitext(f)[1].lower()
-                if not MEDIA_EXTENSIONS.get(ext, False):
-                    continue
-                fpath = os.path.join(root, f)
-                if os.path.islink(fpath):
-                    continue
+            for fname in files:
+                fpath = os.path.join(root, fname)
                 self._check_file(fpath)
 
     def _check_file(self, path):
+        if os.path.islink(path):
+            LOG.info("Skipping link %s", path)
+            return
+        ext = os.path.splitext(path)[1].lower()
+        if not MEDIA_EXTENSIONS.get(ext, False):
+            return
+        with open(path, 'rb') as f:
+            try:
+                image = Image.open(f)
+                if (image.width < MINIMUM_IMAGE_WIDTH
+                        or image.height < MINIMUM_IMAGE_HEIGHT):
+                    LOG.info("Skipping too small image: %s", path)
+                    return
+            except IOError:
+                LOG.info("Image open failed: %s", path)
+                # ignore
         drive_file = self._drive_files.get(self._md5(path), None)
         if drive_file:
             self._already_uploaded += 1
